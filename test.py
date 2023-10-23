@@ -12,6 +12,8 @@ import getpass
 sys.path.append(f"C:\\Users\\Fanyi\\Desktop\\coppy")
 
 import ikt
+
+INTERVAL = 0.02
 #逆解器
 #逆解器使用范例:q_int_1 = ikt.inv_kinematics([-0.1,0.35,0.175,0,np.pi,0])[0,:]
 
@@ -95,6 +97,11 @@ def CubSp_traj_planning(time_array,pose_array,sample_time):
     q = [s(sample_time) for s in splines]
     return np.array(q)
 
+def cubSpTraj(time_array,pose_array, interval=INTERVAL):
+    for t in np.arange(time_array[0], time_array[-1], interval):
+        print(CubSp_traj_planning(time_array,pose_array, t))
+        yield CubSp_traj_planning(time_array,pose_array, t)
+
 def test():
     global q_0,q_1,q_2
     q_0 = np.array([0,0,0,0,0,0])
@@ -172,21 +179,33 @@ def test():
             print("timeout!")
 
 
-def moveTraj(robot: Robot, traj, time):
-    interval = time  
+def moveTraj(robot: Robot, traj, interval=INTERVAL):  
+    lastTime = time.time()
     for pos in traj:
-        start = time.time()
+        r.syncMove(pos)
+        time.sleep(interval)
+        print(pos)
         robot.syncMove(pos)
-        end = time.time()
-        spend_time = end - start
+        spend_time = time.time() - lastTime
+        lastTime = time.time()
         if spend_time < interval:
             time.sleep(interval - spend_time)
         else:
             print("timeout!")
 
 
-
+def getJointAngle(pos):
+    return  ikt.inv_kinematics(pos)[0,:]*180/np.pi
 
 if __name__ == '__main__': 
-    test()
+    r = Robot(com='COM4', baud=250000)
+    r.connect()
+    r.go_home()
+    start = np.array([0,0,0,0,0,0])
+    grap1 = getJointAngle([0.4, 0, 0.155,0, np.pi, 0])
+    grap2 = getJointAngle([0.4, 0, 0.1,0, np.pi, 0])
+    interval = 0.02
+    traj1 = cubSpTraj([0,5,7],[start,grap1,grap2])
+    moveTraj(r, traj1)
+    # moveTraj(r, traj1)
     
