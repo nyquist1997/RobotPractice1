@@ -39,7 +39,7 @@ def inv_based_traj_planning(start,end,t,time):
         
         xArray = []
         for i in range(len(start)):
-            xArray.append([start[i], end[i], 0, 0, 0, 0])
+            xArray.append([0, 1, 0, 0, 0, 0])
         xMatrix = np.matrix(xArray).T
         
         kMatrix = tMatrix.I * xMatrix
@@ -51,6 +51,14 @@ def inv_based_traj_planning(start,end,t,time):
     else:
         x = end
     return x
+
+# def invTraj(start, end, duration, interval=INTERVAL):
+#     for t in 
+#         yield inv_based_traj_planning(start,end,t,duration):
+
+# def invTraj(start, end, t, duration):
+#     orientation = (np.array(end) - np.array(start)) * t / duration
+#     return # TODO
 
 def trajPlaningDemo(start, end, t, time):
     """ Quintic Polynomial: x = k5*t^5 + k4*t^4 + k3*t^3 + k2*t^2 + k1*t + k0
@@ -85,6 +93,7 @@ def trajPlaningDemo(start, end, t, time):
     return x
 
 
+
 #三次样条插值
 def CubSp_traj_planning(time_array,pose_array,sample_time):
     
@@ -99,7 +108,6 @@ def CubSp_traj_planning(time_array,pose_array,sample_time):
 
 def cubSpTraj(time_array,pose_array, interval=INTERVAL):
     for t in np.arange(time_array[0], time_array[-1], interval):
-        print(CubSp_traj_planning(time_array,pose_array, t))
         yield CubSp_traj_planning(time_array,pose_array, t)
 
 def test():
@@ -179,12 +187,16 @@ def test():
             print("timeout!")
 
 
-def moveTraj(robot: Robot, traj, interval=INTERVAL):  
+def moveTraj(robot: Robot, traj, interval=0.002):  
     lastTime = time.time()
     for pos in traj:
         r.syncMove(pos)
         time.sleep(interval)
         print(pos)
+        assert -90 < pos[0] < 90 and -90 < pos[1] < 90 and -120 < pos[2] < 120 and -150 < pos[3] < 150 and -150 < pos[4] < 150 and -180 < pos[5] < 180, "Invalid position: {}".format(pos)
+        realPos = robot.syncFeedback()[:, 0]
+        # print(realPos, type (realPos))
+        assert -90 < realPos[0] < 90 and -90 < realPos[1] < 90 and -120 < realPos[2] < 120 and -150 < realPos[3] < 150 and -150 < realPos[4] < 150 and -180 < realPos[5] < 180, "Invalid position: {}".format(realPos)
         robot.syncMove(pos)
         spend_time = time.time() - lastTime
         lastTime = time.time()
@@ -198,14 +210,64 @@ def getJointAngle(pos):
     return  ikt.inv_kinematics(pos)[0,:]*180/np.pi
 
 if __name__ == '__main__': 
+    print("kkkk",getJointAngle([0.05, -0.4, 0.1,0, np.pi, 0]))
+    # exit(0)
+    # interval = 0.02
     r = Robot(com='COM4', baud=250000)
     r.connect()
     r.go_home()
+
+    # define waypoint
     start = np.array([0,0,0,0,0,0])
-    grap1 = getJointAngle([0.4, 0, 0.155,0, np.pi, 0])
-    grap2 = getJointAngle([0.4, 0, 0.1,0, np.pi, 0])
-    interval = 0.02
-    traj1 = cubSpTraj([0,5,7],[start,grap1,grap2])
-    moveTraj(r, traj1)
-    # moveTraj(r, traj1)
+    cubic1 = getJointAngle([0.36, 0.075, 0.1,0, np.pi, 0])
+    topOfCubic1 = getJointAngle([0.36, 0.075, 0.2,0, np.pi, 0])
+    cubic2 = getJointAngle([0.36, -0.050, 0.075,0, np.pi, 0])
+    topOfCubic2 = getJointAngle([0.36, -0.050, 0.2,0, np.pi, 0])
+    halfwayOfCubic2 = (cubic2 + topOfCubic2) / 2
+    lineStart = [0.37, -0.09, 0.2,0,np.pi,0]
+    lineEnd = [0.288, -0.288, 0.2,0, np.pi, 0]
+   
+    linearMoveStart = getJointAngle(lineStart)
+    lineMoveEnd = getJointAngle(lineEnd)
+    
+    topOfDrop = getJointAngle([0.145, -0.38, 0.25,0, np.pi, 0])
+    dropCubic1 = getJointAngle([0.145, -0.38, 0.075,0, np.pi, 0])
+    dropCubic2 = getJointAngle([0.142, -0.385, 0.12,0, np.pi, 0])
+
+    trajLinear = cubSpTraj(np.linspace(0, 3, 200), list(map(getJointAngle, np.linspace(lineStart, lineEnd, 200))))
+
+    # get cubic 1
+    moveTraj(r, cubSpTraj([0,4,5,8,9]
+                          + np.linspace(10, 13, 100, endpoint=True).tolist()
+                          + [15, 17],
+                          
+                          [start,topOfCubic1,cubic1,cubic1,topOfCubic1]
+                          + list(map(getJointAngle, np.linspace(lineStart, lineEnd, 100, endpoint=True)))
+                          + [topOfDrop, dropCubic1]
+                          ))
+    
+    # drop cubic 1
+    # moveTraj(r, cubSpTraj([0, 2, 4, 6, 8],[lineMoveEnd, topOfDrop, dropCubic1, dropCubic1, topOfDrop]))
+
+    # go to cubic 2 and get cubic 2
+    moveTraj(r, cubSpTraj([0,2,4,6,8,10,12,14]
+                          + np.linspace(17, 20, 100, endpoint=True).tolist()
+                          + [22, 24, 26, 28],
+                          [dropCubic1, dropCubic1, topOfDrop, topOfCubic2, halfwayOfCubic2, cubic2, cubic2, topOfCubic2]
+                          + list(map(getJointAngle, np.linspace(lineStart, lineEnd, 100, endpoint=True)))
+                          + [topOfDrop, dropCubic2, dropCubic2, topOfDrop]
+                          ))
+
+    # move linear trajectory
+    # moveTraj(r, trajLinear)
+    # moveTraj(r, cubSpTraj(np.linspace(0, 3, 100), list(map(getJointAngle, np.linspace(lineStart, lineEnd, 100)))))
+
+    # drop cubic 2
+    # moveTraj(r, cubSpTraj([0, 2, 4, 6, 8],[lineMoveEnd, topOfDrop, dropCubic2, dropCubic2, topOfDrop]))
+
+    print("done")
+
+    
+
+    
     
